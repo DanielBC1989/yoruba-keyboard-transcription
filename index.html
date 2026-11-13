@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="yo">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kọ́ Yorùbá — Keyboard, Audio Upload &amp; Transcription</title>
+  <style>
+    :root {
+      --bg: #f6f4ef;
+      --surface: #ffffff;
+      --surface-alt: #efece4;
+      --border: #dcd6c8;
+      --text: #1e2421;
+      --muted: #5e6661;
+      --primary: #1b5e43;
+      --primary-hover: #144732;
+      --accent: #c86d2d;
+      --accent-soft: #fdf1e8;
+      --danger: #b42318;
+      --danger-soft: #fef3f2;
+      --key-bg: #ffffff;
+      --key-border: #cfc8b8;
+      --key-shadow: #b8b09e;
+      --key-active: #e6f2ec;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      padding: 12px;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand h1 {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .brand p {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22a06b;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 310px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (max-width: 920px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+
+    .editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    button.btn {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 11px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.12s ease;
+    }
+
+    button.btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    button.btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    button.btn-accent {
+      background: var(--accent-soft);
+      border-color: #e8bfa1;
+      color: #8f4614;
+    }
+
+    button.btn-mic {
+      background: #eef6ff;
+      border-color: #b2ddff;
+      color: #175cd3;
+    }
+
+    button.btn-mic.recording {
+      background: var(--danger-soft);
+      border-color: #fecdca;
+      color: var(--danger);
+      animation: pulse 1.2s infinite;
+    }
+
+    button.btn-upload {
+      background: #f4f3ff;
+      border-color: #d9d6fe;
+      color: #5925dc;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(180, 35, 24, 0.35); }
+      70% { box-shadow: 0 0 0 8px rgba(180, 35, 24, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, 0); }
+    }
+
+    .audio-workspace {
+      display: none;
+      background: #f9f8ff;
+      border: 1px solid #d9d6fe;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .audio-workspace.active {
+      display: block;
+    }
+
+    .audio-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #5925dc;
+      margin-bottom: 6px;
+    }
+
+    .audio-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .interim-banner {
+      display: none;
+      font-size: 0.84rem;
+      color: #175cd3;
+      background: #f5faff;
+      border: 1px dashed #84caff;
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+    }
+
+    .interim-banner.active {
+      display: block;
+    }
+
+    textarea#pad {
+      width: 100%;
+      min-height: 130px;
+      padding: 12px;
+      font-size: 1.25rem;
+      line-height: 1.55;
+      font-family: -apple-system, "Noto Sans", sans-serif;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      resize: vertical;
+      background: #fcfbf9;
+      color: var(--text);
+      outline: none;
+    }
+
+    textarea#pad:focus {
+      border-color: var(--primary);
+      background: #ffffff;
+    }
+
+    .editor-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .modifier-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin: 12px 0;
+      padding: 8px 10px;
+      background: var(--surface-alt);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .modifier-label {
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--muted);
+      width: 100%;
+      margin-bottom: 2px;
+    }
+
+    .mod-btn {
+      background: #fff;
+      border: 1px solid var(--key-border);
+      box-shadow: 0 2px 0 var(--key-shadow);
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+      color: var(--text);
+      touch-action: manipulation;
+    }
+
+    .mod-btn:active {
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+
+    .mod-btn.active-shift {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .matrix-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .matrix-header h2 {
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .scroll-hint {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 4px;
+    }
+
+    .tone-grid {
+      display: grid;
+      grid-template-columns: 64px repeat(9, minmax(36px, 1fr));
+      gap: 5px;
+      min-width: 420px;
+      margin-bottom: 10px;
+    }
+
+    .row-tag {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: var(--surface-alt);
+      border-radius: 8px;
+      padding: 4px 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .row-tag span {
+      font-size: 0.64rem;
+      font-weight: 500;
+    }
+
+    .key {
+      background: var(--key-bg);
+      border: 1px solid var(--key-border);
+      box-shadow: 0 2px 0 var(--key-shadow);
+      border-radius: 8px;
+      padding: 10px 2px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      text-align: center;
+      user-select: text;
+      -webkit-user-select: text;
+      touch-action: manipulation;
+    }
+
+    .key:active {
+      background: var(--key-active);
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+
+    .key.special {
+      background: #fdf8f3;
+      border-color: #e4c7ae;
+      color: #8a4111;
+    }
+
+    .consonant-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .consonant-row .key {
+      min-width: 44px;
+      padding: 9px 11px;
+      font-size: 1.1rem;
+    }
+
+    .consonant-row .key.wide {
+      flex: 1;
+      min-width: 100px;
+      font-size: 0.9rem;
+    }
+
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .side-panel h3 {
+      font-size: 0.92rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--primary);
+    }
+
+    .tone-trainer {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .tone-play-btn {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 6px;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .tone-play-btn strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--primary);
+    }
+
+    .tone-play-btn small {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .phrase-chips {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .phrase-chip {
+      text-align: left;
+      background: #fcfbf9;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .phrase-chip .yo {
+      display: block;
+      font-weight: 700;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+
+    .phrase-chip .en {
+      display: block;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--text);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s ease;
+      z-index: 99;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>Kọ́ Yorùbá — Keyboard, Audio Upload &amp; Voice Pad</h1>
+        <p>Type diacritics, upload Yorùbá audio to auto-transcribe, or dictate with your mic.</p>
+      </div>
+      <div class="status-pill">
+        <span class="status-dot" id="smart-dot"></span>
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="smart-typing" checked />
+          Smart Shortcuts
+        </label>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="editor-toolbar">
+          <div class="toolbar-group">
+            <button type="button" class="btn btn-primary" onclick="copyText()">📋 Copy</button>
+            <button type="button" class="btn btn-upload" onclick="document.getElementById('audio-file-input').click()">📂 Audio File</button>
+            <button type="button" class="btn btn-mic" id="mic-btn" onclick="toggleDictation()">🎙️ Dictate</button>
+            <button type="button" class="btn btn-accent" onclick="speakYoruba()">🔊 Listen</button>
+            <button type="button" class="btn" onclick="downloadTxt()">💾 .txt</button>
+          </div>
+          <div class="toolbar-group">
+            <button type="button" class="btn" onclick="undoText()">↩ Undo</button>
+            <button type="button" class="btn" onclick="clearText()">🗑 Clear</button>
+          </div>
+        </div>
+
+        <input type="file" id="audio-file-input" accept="audio/*,.mp3,.m4a,.wav,.ogg" style="display:none" onchange="handleAudioUpload(event)" />
+
+        <!-- Audio File Transcription Workspace -->
+        <div class="audio-workspace" id="audio-workspace">
+          <div class="audio-header">
+            <span id="audio-filename">🎵 audio.mp3</span>
+            <button type="button" class="btn" style="padding:2px 8px; font-size:0.75rem;" onclick="closeAudioWorkspace()">✕ Close</button>
+          </div>
+          <audio id="audio-player" controls style="width:100%; height:36px;"></audio>
+          <div class="audio-controls">
+            <button type="button" class="btn btn-primary" id="transcribe-ai-btn" onclick="transcribeUploadedAudio()">✨ Auto-Transcribe</button>
+            <button type="button" class="btn" onclick="setPlaybackRate(0.75)">🐢 0.75×</button>
+            <button type="button" class="btn" onclick="setPlaybackRate(1.0)">▶️ 1.0×</button>
+            <button type="button" class="btn" id="loop-btn" onclick="toggleLoop()">🔁 Loop: Off</button>
+          </div>
+        </div>
+
+        <div class="interim-banner" id="interim-box">🎙️ Listening in Yorùbá (yo-NG)... <span id="interim-text"></span></div>
+
+        <textarea id="pad" placeholder="Bẹ̀rẹ̀ sí í kọ̀wé tàbí sọ̀rọ̀ níbí... (Type, upload audio, or dictate Yorùbá here...)" spellcheck="false"></textarea>
+
+        <div class="editor-footer">
+          <span id="char-count">0 chars · 0 words</span>
+          <span>Shortcuts: <strong>e.</strong> → <strong>ẹ</strong>, <strong>/</strong> → <strong>ẹ́</strong></span>
+        </div>
+
+        <div class="modifier-bar">
+          <span class="modifier-label">Modify Letter Before Cursor:</span>
+          <button type="button" class="mod-btn" id="shift-btn" onpointerdown="preventFocusLoss(event)" onclick="toggleShift()">⇧ abc</button>
+          <button type="button" class="mod-btn" onpointerdown="preventFocusLoss(event)" onclick="applyTone('low')">Do ( ` )</button>
+          <button type="button" class="mod-btn" onpointerdown="preventFocusLoss(event)" onclick="applyTone('high')">Mi ( ́ )</button>
+          <button type="button" class="mod-btn" onpointerdown="preventFocusLoss(event)" onclick="applyTone('mid')">Re (Mid)</button>
+          <button type="button" class="mod-btn" onpointerdown="preventFocusLoss(event)" onclick="toggleSubdot()">Dot (ẹ/ọ/ṣ)</button>
+        </div>
+
+        <div class="matrix-header">
+          <h2>Yorùbá Tone Matrix</h2>
+          <span style="font-size:0.74rem; color:var(--muted);">Swipe sideways on small screens →</span>
+        </div>
+
+        <div class="scroll-hint">
+          <div class="tone-grid" id="tone-grid">
+          <div class="row-tag">Mi<span>High ( ́ )</span></div>
+          <button type="button" class="key" data-lower="á" data-upper="Á" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">á</button>
+          <button type="button" class="key" data-lower="é" data-upper="É" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">é</button>
+          <button type="button" class="key special" data-lower="ẹ́" data-upper="Ẹ́" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ẹ́</button>
+          <button type="button" class="key" data-lower="í" data-upper="Í" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">í</button>
+          <button type="button" class="key" data-lower="ó" data-upper="Ó" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ó</button>
+          <button type="button" class="key special" data-lower="ọ́" data-upper="Ọ́" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ọ́</button>
+          <button type="button" class="key" data-lower="ú" data-upper="Ú" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ú</button>
+          <button type="button" class="key" data-lower="ń" data-upper="Ń" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ń</button>
+          <button type="button" class="key" data-lower="ḿ" data-upper="Ḿ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ḿ</button>
+          <div class="row-tag">Re<span>Mid</span></div>
+          <button type="button" class="key" data-lower="a" data-upper="A" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">a</button>
+          <button type="button" class="key" data-lower="e" data-upper="E" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">e</button>
+          <button type="button" class="key special" data-lower="ẹ" data-upper="Ẹ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ẹ</button>
+          <button type="button" class="key" data-lower="i" data-upper="I" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">i</button>
+          <button type="button" class="key" data-lower="o" data-upper="O" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">o</button>
+          <button type="button" class="key special" data-lower="ọ" data-upper="Ọ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ọ</button>
+          <button type="button" class="key" data-lower="u" data-upper="U" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">u</button>
+          <button type="button" class="key" data-lower="n" data-upper="N" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">n</button>
+          <button type="button" class="key" data-lower="m" data-upper="M" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">m</button>
+          <div class="row-tag">Do<span>Low ( ` )</span></div>
+          <button type="button" class="key" data-lower="à" data-upper="À" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">à</button>
+          <button type="button" class="key" data-lower="è" data-upper="È" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">è</button>
+          <button type="button" class="key special" data-lower="ẹ̀" data-upper="Ẹ̀" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ẹ̀</button>
+          <button type="button" class="key" data-lower="ì" data-upper="Ì" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ì</button>
+          <button type="button" class="key" data-lower="ò" data-upper="Ò" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ò</button>
+          <button type="button" class="key special" data-lower="ọ̀" data-upper="Ọ̀" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ọ̀</button>
+          <button type="button" class="key" data-lower="ù" data-upper="Ù" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ù</button>
+          <button type="button" class="key" data-lower="ǹ" data-upper="Ǹ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ǹ</button>
+          <button type="button" class="key" data-lower="m̀" data-upper="M̀" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">m̀</button>
+          </div>
+        </div>
+
+        <div class="consonant-row" id="consonant-row">
+        <button type="button" class="key special" data-lower="ẹ" data-upper="Ẹ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ẹ</button>
+        <button type="button" class="key special" data-lower="ọ" data-upper="Ọ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ọ</button>
+        <button type="button" class="key special" data-lower="ṣ" data-upper="Ṣ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ṣ</button>
+        <button type="button" class="key special" data-lower="gb" data-upper="GB" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">gb</button>
+        <button type="button" class="key" data-lower="ń" data-upper="Ń" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ń</button>
+        <button type="button" class="key" data-lower="ǹ" data-upper="Ǹ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ǹ</button>
+        <button type="button" class="key" data-lower="ḿ" data-upper="Ḿ" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">ḿ</button>
+        <button type="button" class="key" data-lower="m̀" data-upper="M̀" onpointerdown="preventFocusLoss(event)" onclick="insertKey(this)">m̀</button>
+        <button type="button" class="key wide" onpointerdown="preventFocusLoss(event)" onclick="insertAtCursor(' ')">Space</button>
+        <button type="button" class="key" onpointerdown="preventFocusLoss(event)" onclick="backspaceAtCursor()">⌫</button>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <div class="card">
+          <h3>🎵 Tone Pitch Trainer</h3>
+          <div class="tone-trainer">
+            <button type="button" class="tone-play-btn" onclick="playPitch(196)">
+              <strong>Do ( ` )</strong>
+              <small>Low · à, è</small>
+            </button>
+            <button type="button" class="tone-play-btn" onclick="playPitch(246.94)">
+              <strong>Re ( &nbsp; )</strong>
+              <small>Mid · a, e</small>
+            </button>
+            <button type="button" class="tone-play-btn" onclick="playPitch(329.63)">
+              <strong>Mi ( ́ )</strong>
+              <small>High · á, é</small>
+            </button>
+          </div>
+          <div style="font-size:0.8rem; background:var(--surface-alt); padding:8px 10px; border-radius:8px;">
+            • <strong>igbá</strong> (Re-Mi) = calabash<br/>
+            • <strong>igba</strong> (Re-Re) = two hundred<br/>
+            • <strong>ìgbà</strong> (Do-Do) = time / period<br/>
+            • <strong>ìgbá</strong> (Do-Mi) = locust bean tree
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>💬 Practice Phrases</h3>
+          <div class="phrase-chips">
+            <button type="button" class="phrase-chip" onclick="insertPhrase('Ẹ káàárọ̀! Báwo ni o ṣe wà?')">
+              <span class="yo">Ẹ káàárọ̀! Báwo ni o ṣe wà?</span>
+              <span class="en">Good morning! How are you?</span>
+            </button>
+            <button type="button" class="phrase-chip" onclick="insertPhrase('Mo wà ní àlàáfíà, o ṣé púpọ̀.')">
+              <span class="yo">Mo wà ní àlàáfíà, o ṣé púpọ̀.</span>
+              <span class="en">I am well, thank you very much.</span>
+            </button>
+            <button type="button" class="phrase-chip" onclick="insertPhrase('Mo ń kọ́ èdè Yorùbá lọ́wọ́lọ́wọ́.')">
+              <span class="yo">Mo ń kọ́ èdè Yorùbá lọ́wọ́lọ́wọ́.</span>
+              <span class="en">I am currently learning Yorùbá.</span>
+            </button>
+            <button type="button" class="phrase-chip" onclick="insertPhrase('Jọ̀wọ́, sọ ọ́ lẹ́ẹ̀kan sí i.')">
+              <span class="yo">Jọ̀wọ́, sọ ọ́ lẹ́ẹ̀kan sí i.</span>
+              <span class="en">Please, say it one more time.</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied to clipboard!</div>
+
+  <script>
+    const pad = document.getElementById("pad");
+    const smartCheckbox = document.getElementById("smart-typing");
+    const shiftBtn = document.getElementById("shift-btn");
+    const micBtn = document.getElementById("mic-btn");
+    const interimBox = document.getElementById("interim-box");
+    const interimText = document.getElementById("interim-text");
+    const audioWorkspace = document.getElementById("audio-workspace");
+    const audioPlayer = document.getElementById("audio-player");
+
+    let isShift = false;
+    let historyStack = [];
+    let audioCtx = null;
+    let recognition = null;
+    let isRecording = false;
+    let uploadedAudioFile = null;
+
+    function preventFocusLoss(e) {
+      e.preventDefault();
+    }
+
+    function handleAudioUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.size > 15 * 1024 * 1024) {
+        showToast("Please choose an audio file under 15 MB.");
+        return;
+      }
+      uploadedAudioFile = file;
+      document.getElementById("audio-filename").textContent = "🎵 " + file.name;
+      audioPlayer.src = URL.createObjectURL(file);
+      audioWorkspace.classList.add("active");
+      showToast("Audio loaded! Click Auto-Transcribe or play.");
+    }
+
+    function closeAudioWorkspace() {
+      audioPlayer.pause();
+      audioWorkspace.classList.remove("active");
+    }
+
+    function setPlaybackRate(rate) {
+      audioPlayer.playbackRate = rate;
+      showToast("Playback speed: " + rate + "×");
+    }
+
+    function toggleLoop() {
+      audioPlayer.loop = !audioPlayer.loop;
+      document.getElementById("loop-btn").textContent = audioPlayer.loop ? "🔁 Loop: On" : "🔁 Loop: Off";
+    }
+
+    async function transcribeUploadedAudio() {
+      if (!uploadedAudioFile) {
+        showToast("Please select an audio file first.");
+        return;
+      }
+
+      const btn = document.getElementById("transcribe-ai-btn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Transcribing...";
+
+      try {
+        const audioBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadedAudioFile);
+        });
+
+        const response = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audioBase64,
+            mimeType: uploadedAudioFile.type || "audio/mp3"
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.transcript) {
+          insertPhrase(data.transcript);
+          showToast("Yorùbá transcription inserted!");
+        } else {
+          showToast("Error: " + (data.error || "Could not transcribe audio."));
+        }
+      } catch (err) {
+        showToast("Transcription failed: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "✨ Auto-Transcribe";
+      }
+    }
+
+    function insertKey(btn) {
+      const val = isShift ? btn.getAttribute("data-upper") : btn.getAttribute("data-lower");
+      insertAtCursor(val);
+    }
+
+    function saveHistory() {
+      historyStack.push(pad.value);
+      if (historyStack.length > 40) historyStack.shift();
+    }
+
+    function undoText() {
+      if (historyStack.length > 0) {
+        pad.value = historyStack.pop();
+        updateStats();
+      }
+    }
+
+    function insertAtCursor(text) {
+      saveHistory();
+      const start = pad.selectionStart ?? pad.value.length;
+      const end = pad.selectionEnd ?? pad.value.length;
+      pad.value = pad.value.slice(0, start) + text + pad.value.slice(end);
+      const nextPos = start + text.length;
+      pad.setSelectionRange(nextPos, nextPos);
+      updateStats();
+    }
+
+    function backspaceAtCursor() {
+      saveHistory();
+      const start = pad.selectionStart ?? pad.value.length;
+      const end = pad.selectionEnd ?? pad.value.length;
+      if (start !== end) {
+        pad.value = pad.value.slice(0, start) + pad.value.slice(end);
+        pad.setSelectionRange(start, start);
+      } else if (start > 0) {
+        const chars = Array.from(pad.value.slice(0, start));
+        chars.pop();
+        const prefix = chars.join("");
+        pad.value = prefix + pad.value.slice(end);
+        pad.setSelectionRange(prefix.length, prefix.length);
+      }
+      updateStats();
+    }
+
+    function toggleShift() {
+      isShift = !isShift;
+      shiftBtn.classList.toggle("active-shift", isShift);
+      shiftBtn.textContent = isShift ? "⇧ ABC" : "⇧ abc";
+      document.querySelectorAll(".key[data-lower]").forEach(btn => {
+        btn.textContent = isShift ? btn.getAttribute("data-upper") : btn.getAttribute("data-lower");
+      });
+    }
+
+    function transformPreviousChar(transformer) {
+      const start = pad.selectionStart ?? pad.value.length;
+      const end = pad.selectionEnd ?? pad.value.length;
+
+      if (start !== end) {
+        saveHistory();
+        const selected = pad.value.slice(start, end);
+        const updated = Array.from(selected).map(transformer).join("");
+        pad.value = pad.value.slice(0, start) + updated + pad.value.slice(end);
+        pad.setSelectionRange(start, start + updated.length);
+        updateStats();
+        return;
+      }
+
+      if (start === 0) return;
+      const before = Array.from(pad.value.slice(0, start));
+      const lastChar = before[before.length - 1];
+      const transformed = transformer(lastChar);
+      if (transformed !== lastChar) {
+        saveHistory();
+        before[before.length - 1] = transformed;
+        const newPrefix = before.join("");
+        pad.value = newPrefix + pad.value.slice(end);
+        pad.setSelectionRange(newPrefix.length, newPrefix.length);
+        updateStats();
+      }
+    }
+
+    function applyTone(toneType) {
+      transformPreviousChar(ch => {
+        const nfd = ch.normalize("NFD");
+        const base = nfd[0];
+        if (!/[aeioumnAEIOUMN]/.test(base)) return ch;
+        const hasDot = nfd.includes("\u0323");
+        let out = base + (hasDot ? "\u0323" : "");
+        if (toneType === "high") out += "\u0301";
+        if (toneType === "low") out += "\u0300";
+        return out.normalize("NFC");
+      });
+    }
+
+    function toggleSubdot() {
+      transformPreviousChar(ch => {
+        const nfd = ch.normalize("NFD");
+        const base = nfd[0];
+        if (!/[eosEOS]/.test(base)) return ch;
+        const hasDot = nfd.includes("\u0323");
+        const hasHigh = nfd.includes("\u0301");
+        const hasLow = nfd.includes("\u0300");
+        let out = base + (!hasDot ? "\u0323" : "");
+        if (hasHigh) out += "\u0301";
+        if (hasLow) out += "\u0300";
+        return out.normalize("NFC");
+      });
+    }
+
+    pad.addEventListener("keydown", (e) => {
+      if (!smartCheckbox.checked || e.ctrlKey || e.metaKey || e.altKey) return;
+      const start = pad.selectionStart;
+      if (start === 0 || pad.selectionStart !== pad.selectionEnd) return;
+
+      const before = Array.from(pad.value.slice(0, start));
+      const prev = before[before.length - 1];
+      const prevBase = prev.normalize("NFD")[0];
+
+      if ((e.key === ";" || e.key === ".") && /[eosEOS]/.test(prevBase)) {
+        e.preventDefault();
+        toggleSubdot();
+      } else if (e.key === "\\" && /[aeioumnAEIOUMN]/.test(prevBase)) {
+        e.preventDefault();
+        applyTone("low");
+      } else if (e.key === "/" && /[aeioumnAEIOUMN]/.test(prevBase)) {
+        e.preventDefault();
+        applyTone("high");
+      } else if (e.key === "=" && /[aeioumnAEIOUMN]/.test(prevBase)) {
+        e.preventDefault();
+        applyTone("mid");
+      }
+    });
+
+    pad.addEventListener("input", updateStats);
+
+    smartCheckbox.addEventListener("change", () => {
+      document.getElementById("smart-dot").style.background = smartCheckbox.checked ? "#22a06b" : "#9aa19d";
+    });
+
+    function updateStats() {
+      const val = pad.value;
+      const chars = Array.from(val).length;
+      const words = val.trim() ? val.trim().split(/\s+/).length : 0;
+      document.getElementById("char-count").textContent = `${chars} char${chars === 1 ? "" : "s"} · ${words} word${words === 1 ? "" : "s"}`;
+    }
+
+    function insertPhrase(phrase) {
+      const needsSpace = pad.value.length > 0 && !pad.value.endsWith(" ") && !pad.value.endsWith("\n");
+      insertAtCursor((needsSpace ? " " : "") + phrase);
+    }
+
+    function toggleDictation() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        showToast("Speech recognition requires Chrome, Edge, or Safari.");
+        return;
+      }
+
+      if (isRecording && recognition) {
+        recognition.stop();
+        return;
+      }
+
+      recognition = new SpeechRec();
+      recognition.lang = "yo-NG";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add("recording");
+        micBtn.textContent = "⏹ Stop";
+        interimBox.classList.add("active");
+        interimText.textContent = "";
+      };
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        let finalChunk = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalChunk += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+        interimText.textContent = interim;
+        if (finalChunk.trim()) {
+          insertPhrase(finalChunk.trim());
+          interimText.textContent = "";
+        }
+      };
+
+      recognition.onerror = (event) => {
+        showToast("Mic error: " + event.error);
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove("recording");
+        micBtn.textContent = "🎙️ Dictate";
+        interimBox.classList.remove("active");
+      };
+
+      recognition.start();
+    }
+
+    function copyText() {
+      if (!pad.value) {
+        showToast("Nothing to copy yet!");
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pad.value).then(() => {
+          showToast("Copied Yorùbá text!");
+        }).catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+    }
+
+    function fallbackCopy() {
+      pad.select();
+      document.execCommand("copy");
+      showToast("Copied Yorùbá text!");
+    }
+
+    function clearText() {
+      if (!pad.value) return;
+      saveHistory();
+      pad.value = "";
+      updateStats();
+    }
+
+    function downloadTxt() {
+      const blob = new Blob([pad.value], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "yoruba-notes.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function speakYoruba() {
+      if (!pad.value.trim()) {
+        showToast("Type or insert a phrase first!");
+        return;
+      }
+      if (!("speechSynthesis" in window)) {
+        showToast("Speech not supported here.");
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(pad.value);
+      const voices = window.speechSynthesis.getVoices();
+      const yoVoice = voices.find(v => v.lang.toLowerCase().startsWith("yo"));
+      if (yoVoice) utter.voice = yoVoice;
+      utter.lang = "yo-NG";
+      utter.rate = 0.9;
+      window.speechSynthesis.speak(utter);
+    }
+
+    function playPitch(freq) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtx) audioCtx = new AudioCtx();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.46);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2200);
+    }
+
+    updateStats();
+  </script>
+</body>
+</html>
