@@ -698,6 +698,7 @@
     const ttsPlayer = new Audio();
     ttsPlayer.playsInline = true;
     let currentTtsUrl = null;
+    const ttsCache = new Map();
 
     function preventFocusLoss(e) {
       e.preventDefault();
@@ -1180,6 +1181,21 @@
       return new Blob([buffer], { type: "audio/wav" });
     }
 
+    function fallbackBrowserSpeak(text) {
+      if (!("speechSynthesis" in window)) return false;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const yoVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith("yo"));
+      if (yoVoice) {
+        utter.voice = yoVoice;
+        utter.lang = "yo-NG";
+      }
+      utter.rate = 0.9;
+      window.speechSynthesis.speak(utter);
+      return true;
+    }
+
     async function speakYoruba() {
       const text = pad.value.trim();
       if (!text) {
@@ -1201,23 +1217,36 @@
       ttsPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
       ttsPlayer.play().catch(() => {});
 
+      const cleanText = text.replace(/\*\*/g, "").trim().slice(0, 1200);
+
+      // Replay from cache if this exact text was already generated
+      if (ttsCache.has(cleanText)) {
+        ttsPlayer.src = ttsCache.get(cleanText);
+        btn.textContent = "⏹ Stop";
+        ttsPlayer.onended = () => { btn.textContent = "🔊 Listen"; };
+        await ttsPlayer.play();
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = "⏳ Loading audio...";
 
       try {
-        const cleanText = text.replace(/\*\*/g, "").trim();
-
         const response = await fetch("/api/transcribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ textToSpeak: cleanText.slice(0, 1200) })
+          body: JSON.stringify({ textToSpeak: cleanText })
         });
 
         const data = await response.json();
         if (!response.ok || !data.audioBase64) {
-          showToast("Voice error: " + (data.error || "Could not generate audio."));
           btn.disabled = false;
           btn.textContent = "🔊 Listen";
+          if (fallbackBrowserSpeak(cleanText)) {
+            showToast("Gemini TTS daily limit reached—using device voice.");
+          } else {
+            showToast("Voice error: " + (data.error || "Could not generate audio."));
+          }
           return;
         }
 
@@ -1233,8 +1262,8 @@
           blob = new Blob([bytes], { type: data.mimeType || "audio/wav" });
         }
 
-        if (currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
         currentTtsUrl = URL.createObjectURL(blob);
+        ttsCache.set(cleanText, currentTtsUrl);
 
         ttsPlayer.src = currentTtsUrl;
         btn.textContent = "⏹ Stop";
@@ -1252,7 +1281,9 @@
       } catch (err) {
         btn.disabled = false;
         btn.textContent = "🔊 Listen";
-        showToast("Audio failed: " + err.message);
+        if (!fallbackBrowserSpeak(cleanText)) {
+          showToast("Audio failed: " + err.message);
+        }
       }
     }
 
