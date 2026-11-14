@@ -19,18 +19,18 @@ export default async function handler(req, res) {
       cleanMime = "audio/mp4";
     }
 
-    // Try primary model first, then automatically fall back if experiencing high demand
-    const models = [
-      "gemini-3.8-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-3-flash-preview"
+    // Put fastest low-latency models first and capture each model's exact error
+    const attempts = [
+      { model: "gemini-2.5-flash-lite", config: {} },
+      { model: "gemini-3-flash-preview", config: { thinkingConfig: { thinkingLevel: "low" } } },
+      { model: "gemini-3.8-flash", config: { thinkingConfig: { thinkingLevel: "low" } } }
     ];
 
-    let lastError = "Gemini API error";
+    const errors = [];
 
-    for (const model of models) {
+    for (const { model, config } of attempts) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      const timer = setTimeout(() => controller.abort(), 22000);
 
       try {
         const geminiResponse = await fetch(
@@ -40,6 +40,7 @@ export default async function handler(req, res) {
             headers: { "Content-Type": "application/json" },
             signal: controller.signal,
             body: JSON.stringify({
+              generationConfig: config,
               contents: [
                 {
                   parts: [
@@ -64,7 +65,7 @@ export default async function handler(req, res) {
         try {
           data = JSON.parse(rawText);
         } catch {
-          lastError = `Non-JSON response (${geminiResponse.status}) from ${model}`;
+          errors.push(`${model}: HTTP ${geminiResponse.status}`);
           continue;
         }
 
@@ -76,22 +77,22 @@ export default async function handler(req, res) {
           return res.status(200).json({ transcript: transcript.trim() });
         }
 
-        lastError = data?.error?.message || `HTTP ${geminiResponse.status} from ${model}`;
+        const errMsg = data?.error?.message || `HTTP ${geminiResponse.status}`;
+        errors.push(`${model}: ${errMsg}`);
 
-        // Retry with the next model on temporary overload (503/429) or model unavailability (404)
-        if ([404, 429, 500, 503].includes(geminiResponse.status)) {
+        if ([400, 404, 429, 500, 503].includes(geminiResponse.status)) {
           continue;
         }
 
-        return res.status(geminiResponse.status).json({ error: lastError });
+        return res.status(geminiResponse.status).json({ error: errMsg });
       } catch (err) {
-        lastError = err.name === "AbortError" ? `Timeout on ${model}` : err.message;
+        errors.push(`${model}: ${err.name === "AbortError" ? "Timed out (22s)" : err.message}`);
       } finally {
         clearTimeout(timer);
       }
     }
 
-    return res.status(503).json({ error: `All models busy. Last error: ${lastError}` });
+    return res.status(503).json({ error: errors.join(" | ") });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Unexpected server error" });
   }
