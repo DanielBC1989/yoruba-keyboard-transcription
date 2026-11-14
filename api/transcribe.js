@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
     // --- Branch 1: Yorùbá Text-to-Speech (TTS) ---
     if (textToSpeak) {
-      const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-2.5-flash"];
+      const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-3.8-flash"];
       for (const model of ttsModels) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 18000);
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
                   {
                     parts: [
                       {
-                        text: `Read the following Yorùbá text aloud clearly and naturally with accurate Yorùbá pronunciation and tonal inflection (Do, Re, Mi):\n\n${textToSpeak}`
+                        text: `Read aloud this Yorùbá text naturally with accurate Yorùbá pronunciation and tonal marks (Do, Re, Mi): ${textToSpeak}`
                       }
                     ]
                   }
@@ -63,14 +63,20 @@ export default async function handler(req, res) {
           }
 
           if (ttsRes.ok) {
-            const inlineData = data?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData;
-            if (inlineData?.data) {
+            const partsList = data?.candidates?.[0]?.content?.parts || [];
+            const audioPart = partsList.find(p => p.inline_data || p.inlineData);
+            const inlineObj = audioPart?.inline_data || audioPart?.inlineData;
+            if (inlineObj?.data) {
               return res.status(200).json({
-                audioBase64: inlineData.data,
-                mimeType: inlineData.mimeType || "audio/wav"
+                audioBase64: inlineObj.data,
+                mimeType: inlineObj.mime_type || inlineObj.mimeType || "audio/L16;rate=24000"
               });
             }
+            const textFallback = partsList.map(p => p.text).filter(Boolean).join(" ").slice(0, 100);
+            backlog.push(`${model}: HTTP 200 without audio (${textFallback || "empty parts"})`);
+            continue;
           }
+
           backlog.push(`${model}: ${data?.error?.message || `HTTP ${ttsRes.status}`}`);
         } catch (err) {
           backlog.push(`${model}: ${err.message}`);
@@ -116,7 +122,7 @@ export default async function handler(req, res) {
     }
 
     const attempts = [
-      { model: "gemini-2.5-flash-lite", config: {} },
+      { model: "gemini-3.5-flash-lite", config: {} },
       { model: "gemini-3-flash-preview", config: { thinkingConfig: { thinkingLevel: "low" } } },
       { model: "gemini-3.8-flash", config: { thinkingConfig: { thinkingLevel: "low" } } }
     ];
