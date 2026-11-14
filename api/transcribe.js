@@ -13,21 +13,84 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GEMINI_API_KEY in Vercel Environment Variables." });
     }
 
-    const { audioBase64, mimeType, textToTranslate, translateTo } = req.body || {};
-    if (!audioBase64 && !textToTranslate) {
+    const { audioBase64, mimeType, textToTranslate, translateTo, textToSpeak } = req.body || {};
+    if (!audioBase64 && !textToTranslate && !textToSpeak) {
       return res.status(400).json({ error: "No audio or text payload received by server." });
     }
 
+    // --- Branch 1: Yorùbá Text-to-Speech (TTS) ---
+    if (textToSpeak) {
+      const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-2.5-flash"];
+      for (const model of ttsModels) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 18000);
+        try {
+          const ttsRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `Read the following Yorùbá text aloud clearly and naturally with accurate Yorùbá pronunciation and tonal inflection (Do, Re, Mi):\n\n${textToSpeak}`
+                      }
+                    ]
+                  }
+                ],
+                generationConfig: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: "Aoede" }
+                    }
+                  }
+                }
+              })
+            }
+          );
+
+          const rawText = await ttsRes.text();
+          let data = {};
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            backlog.push(`${model}: non-JSON HTTP ${ttsRes.status}`);
+            continue;
+          }
+
+          if (ttsRes.ok) {
+            const inlineData = data?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData;
+            if (inlineData?.data) {
+              return res.status(200).json({
+                audioBase64: inlineData.data,
+                mimeType: inlineData.mimeType || "audio/wav"
+              });
+            }
+          }
+          backlog.push(`${model}: ${data?.error?.message || `HTTP ${ttsRes.status}`}`);
+        } catch (err) {
+          backlog.push(`${model}: ${err.message}`);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      return res.status(502).json({ error: "TTS unavailable: " + backlog.join(" | ") });
+    }
+
+    // --- Branch 2 & 3: Audio Transcription & Text Translation ---
     const targetLang =
       translateTo === "en" ? "English" :
       translateTo === "pt" ? "Portuguese" :
       translateTo === "yo" ? "Yorùbá (with full tonal marks and sub-dots)" : "";
 
     let parts = [];
-    let cleanMime = "";
 
     if (audioBase64) {
-      cleanMime = (mimeType || "audio/mp4").split(";")[0].trim();
+      let cleanMime = (mimeType || "audio/mp4").split(";")[0].trim();
       if (cleanMime.includes("m4a") || cleanMime === "") {
         cleanMime = "audio/mp4";
       }
