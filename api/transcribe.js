@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No audio or text payload received by server." });
     }
 
-    // --- Branch 1: Yorùbá Text-to-Speech (TTS) ---
+    // --- Branch 1: Multilingual Text-to-Speech (Yorùbá, English & Portuguese) ---
     if (textToSpeak) {
       const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-3.8-flash"];
       for (const model of ttsModels) {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
                   {
                     parts: [
                       {
-                        text: `Read aloud this Yorùbá text naturally with accurate Yorùbá pronunciation and tonal marks (Do, Re, Mi): ${textToSpeak}`
+                        text: `Read the following text aloud clearly and naturally, switching seamlessly between Yorùbá (with accurate tonal marks Do, Re, Mi), English, and Portuguese as written:\n\n${textToSpeak}`
                       }
                     ]
                   }
@@ -58,7 +58,7 @@ export default async function handler(req, res) {
           try {
             data = JSON.parse(rawText);
           } catch {
-            backlog.push(`${model}: non-JSON HTTP ${ttsRes.status}`);
+            backlog.push(`${model}: non-JSON HTTP${ttsRes.status}`);
             continue;
           }
 
@@ -77,9 +77,9 @@ export default async function handler(req, res) {
             continue;
           }
 
-          backlog.push(`${model}: ${data?.error?.message || `HTTP ${ttsRes.status}`}`);
+          backlog.push(`${model}:${data?.error?.message || `HTTP ${ttsRes.status}`}`);
         } catch (err) {
-          backlog.push(`${model}: ${err.message}`);
+          backlog.push(`${model}:${err.message}`);
         } finally {
           clearTimeout(timer);
         }
@@ -87,7 +87,7 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: "TTS unavailable: " + backlog.join(" | ") });
     }
 
-    // --- Branch 2 & 3: Audio Transcription & Text Translation ---
+    // --- Branch 2 & 3: Audio Transcription & Two-Way Translation ---
     const targetLang =
       translateTo === "en" ? "English" :
       translateTo === "pt" ? "Portuguese" :
@@ -101,22 +101,14 @@ export default async function handler(req, res) {
         cleanMime = "audio/mp4";
       }
 
-      backlog.push(`[${stamp()}] Received audio (${Math.round(audioBase64.length * 0.75 / 1024)} KB, mime: ${cleanMime}, translate: ${targetLang || "none"})`);
+      backlog.push(`[${stamp()}] Received audio (${Math.round(audioBase64.length * 0.75 / 1024)} KB, mime: ${cleanMime}, translate:${targetLang || "none"})`);
 
       const promptText = targetLang
-        ? `Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ), and provide a natural ${targetLang} translation. Format the output cleanly as:\nYorùbá: <transcription>\n${targetLang}: <translation>`
-        : "Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the Yorùbá transcription.";
-
-      parts = [
-        { text: promptText },
-        { inline_data: { mime_type: cleanMime, data: audioBase64 } }
-      ];
-    } else {
-      backlog.push(`[${stamp()}] Translating text (${textToTranslate.length} chars) -> ${targetLang || "English"}`);
+        ? `Transcribe this audio accurately (preserving standard Yorùbá orthography with full tonal marks àmì ohùn and sub-dots ẹ, ọ, ṣ if spoken in Yorùbá), and provide a natural ${targetLang} translation. Format the output cleanly without markdown asterisks as:\nTranscription: <transcription>\n${targetLang}: <translation>` : "Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the Yorùbá transcription.";  parts = [ { text: promptText }, { inline_data: { mime_type: cleanMime, data: audioBase64 } } ]; } else { backlog.push(`[${stamp()}] Translating text (${textToTranslate.length} chars) ->${targetLang || "English"}`);
       const lang = targetLang || "English";
       parts = [
         {
-          text: `Translate the following text into ${lang}. If the source or target is Yorùbá, preserve or apply accurate standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the translation:\n\n${textToTranslate}`
+          text: `Translate the following text into ${lang}. If the source or target is Yorùbá, preserve or apply accurate standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the translation without markdown formatting:\n\n${textToTranslate}`
         }
       ];
     }
@@ -129,7 +121,7 @@ export default async function handler(req, res) {
 
     for (const { model, config } of attempts) {
       const attemptStart = Date.now();
-      backlog.push(`[${stamp()}] Trying ${model}...`);
+      backlog.push(`[${stamp()}] Trying${model}...`);
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 18000);
@@ -154,21 +146,14 @@ export default async function handler(req, res) {
         try {
           data = JSON.parse(rawText);
         } catch {
-          backlog.push(`[${stamp()}] ${model} failed in ${elapsed}s -> HTTP ${geminiResponse.status} (non-JSON): ${rawText.slice(0, 120)}`);
-          continue;
-        }
-
-        if (geminiResponse.ok) {
-          const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          backlog.push(`[${stamp()}] ${model} succeeded in ${elapsed}s!`);
+          backlog.push(`[${stamp()}]${model} failed in ${elapsed}s -> HTTP${geminiResponse.status} (non-JSON): ${rawText.slice(0, 120)}`); continue; }  if (geminiResponse.ok) { const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text \vert{}\vert{} ""; backlog.push(`[${stamp()}] ${model} succeeded in${elapsed}s!`);
           if (!transcript.trim()) {
             return res.status(200).json({ error: "No speech or text output returned.", backlog });
           }
           return res.status(200).json({ transcript: transcript.trim(), backlog });
         }
 
-        const errMsg = data?.error?.message || `HTTP ${geminiResponse.status}`;
-        backlog.push(`[${stamp()}] ${model} failed in ${elapsed}s -> HTTP ${geminiResponse.status}: ${errMsg}`);
+        const errMsg = data?.error?.message || `HTTP ${geminiResponse.status}`; backlog.push(`[${stamp()}] ${model} failed in${elapsed}s -> HTTP ${geminiResponse.status}:${errMsg}`);
 
         if ([400, 404, 429, 500, 503].includes(geminiResponse.status)) {
           continue;
@@ -178,7 +163,7 @@ export default async function handler(req, res) {
       } catch (err) {
         const elapsed = ((Date.now() - attemptStart) / 1000).toFixed(2);
         const reason = err.name === "AbortError" ? "Aborted after 18s timeout" : err.message;
-        backlog.push(`[${stamp()}] ${model} exception in ${elapsed}s -> ${reason}`);
+        backlog.push(`[${stamp()}]${model} exception in ${elapsed}s ->${reason}`);
       } finally {
         clearTimeout(timer);
       }
@@ -189,7 +174,7 @@ export default async function handler(req, res) {
       backlog
     });
   } catch (err) {
-    backlog.push(`[${stamp()}] Fatal server exception -> ${err.message}`);
+    backlog.push(`[${stamp()}] Fatal server exception ->${err.message}`);
     return res.status(500).json({ error: err.message || "Unexpected server error", backlog });
   }
 }
