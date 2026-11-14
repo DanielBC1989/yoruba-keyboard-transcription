@@ -513,7 +513,7 @@
             <button type="button" class="btn btn-primary" onclick="copyText()">📋 Copy</button>
             <button type="button" class="btn btn-upload" onclick="document.getElementById('audio-file-input').click()">📂 Audio File</button>
             <button type="button" class="btn btn-mic" id="mic-btn" onclick="toggleDictation()">🎙️ Dictate</button>
-            <button type="button" class="btn btn-accent" onclick="speakYoruba()">🔊 Listen</button>
+            <button type="button" class="btn btn-accent" id="listen-btn" onclick="speakYoruba()">🔊 Listen</button>
             <button type="button" class="btn" id="translate-pad-btn" onclick="translatePadText()">🌐 Translate Text</button>
             <select id="translate-lang" class="btn-select" title="Translation language">
               <option value="none">Yorùbá Only</option>
@@ -693,6 +693,7 @@
     let audioChunks = [];
     let isRecording = false;
     let uploadedAudioFile = null;
+    let ttsAudio = null;
 
     function preventFocusLoss(e) {
       e.preventDefault();
@@ -1146,23 +1147,108 @@
       URL.revokeObjectURL(url);
     }
 
-    function speakYoruba() {
-      if (!pad.value.trim()) {
+    function pcmToWavBlob(base64Pcm, sampleRate = 24000) {
+      const binary = atob(base64Pcm);
+      const pcmBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
+
+      const buffer = new ArrayBuffer(44 + pcmBytes.length);
+      const view = new DataView(buffer);
+      const writeStr = (offset, str) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      };
+
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + pcmBytes.length, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, "data");
+      view.setUint32(40, pcmBytes.length, true);
+      new Uint8Array(buffer, 44).set(pcmBytes);
+
+      return new Blob([buffer], { type: "audio/wav" });
+    }
+
+    async function speakYoruba() {
+      const text = pad.value.trim();
+      if (!text) {
         showToast("Type or insert a phrase first!");
         return;
       }
-      if (!("speechSynthesis" in window)) {
-        showToast("Speech not supported here.");
+
+      if (ttsAudio && !ttsAudio.paused) {
+        ttsAudio.pause();
+        ttsAudio = null;
         return;
       }
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(pad.value);
-      const voices = window.speechSynthesis.getVoices();
-      const yoVoice = voices.find(v => v.lang.toLowerCase().startsWith("yo"));
-      if (yoVoice) utter.voice = yoVoice;
-      utter.lang = "yo-NG";
-      utter.rate = 0.9;
-      window.speechSynthesis.speak(utter);
+
+      const btn = document.getElementById("listen-btn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Loading audio...";
+
+      try {
+        const yorubaOnly = text
+          .split("\n")
+          .filter(line => !/^(English|Português|Portuguese):/i.test(line.trim()))
+          .join("\n")
+          .replace(/^Yorùbá:\s*/i, "")
+          .trim() || text;
+
+        const response = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ textToSpeak: yorubaOnly.slice(0, 1000) })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.audioBase64) {
+          showToast("Voice error: " + (data.error || "Could not generate Yorùbá audio."));
+          return;
+        }
+
+        const mime = (data.mimeType || "").toLowerCase();
+        let blob;
+        if (mime.includes("l16") || mime.includes("pcm")) {
+          const rateMatch = mime.match(/rate=(\d+)/);
+          blob = pcmToWavBlob(data.audioBase64, rateMatch ? parseInt(rateMatch[1], 10) : 24000);
+        } else {
+          const bin = atob(data.audioBase64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          blob = new Blob([bytes], { type: data.mimeType || "audio/wav" });
+        }
+
+        const url = URL.createObjectURL(blob);
+        ttsAudio = new Audio(url);
+        btn.textContent = "⏹ Stop";
+        btn.disabled = false;
+
+        ttsAudio.onended = () => {
+          btn.textContent = "🔊 Listen";
+          URL.revokeObjectURL(url);
+          ttsAudio = null;
+        };
+        ttsAudio.onerror = () => {
+          btn.textContent = "🔊 Listen";
+          showToast("Could not play generated audio on this device.");
+        };
+
+        await ttsAudio.play();
+      } catch (err) {
+        showToast("Audio failed: " + err.message);
+      } finally {
+        if (!ttsAudio || ttsAudio.paused) {
+          btn.disabled = false;
+          btn.textContent = "🔊 Listen";
+        }
+      }
     }
 
     function playPitch(freq) {
