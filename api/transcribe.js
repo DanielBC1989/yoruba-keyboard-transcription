@@ -18,11 +18,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No audio data received by server." });
     }
 
-    let cleanMime = mimeType || "audio/mp4";
+    let cleanMime = (mimeType || "audio/mp4").split(";")[0].trim();
     if (cleanMime.includes("m4a") || cleanMime === "") {
       cleanMime = "audio/mp4";
     }
-
+    
     backlog.push(`[${stamp()}] Received payload (${Math.round(audioBase64.length * 0.75 / 1024)} KB, mime: ${cleanMime})`);
 
     const attempts = [
