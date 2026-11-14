@@ -13,17 +13,44 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GEMINI_API_KEY in Vercel Environment Variables." });
     }
 
-    const { audioBase64, mimeType } = req.body || {};
-    if (!audioBase64) {
-      return res.status(400).json({ error: "No audio data received by server." });
+    const { audioBase64, mimeType, textToTranslate, translateTo } = req.body || {};
+    if (!audioBase64 && !textToTranslate) {
+      return res.status(400).json({ error: "No audio or text payload received by server." });
     }
 
-    let cleanMime = (mimeType || "audio/mp4").split(";")[0].trim();
-    if (cleanMime.includes("m4a") || cleanMime === "") {
-      cleanMime = "audio/mp4";
+    const targetLang =
+      translateTo === "en" ? "English" :
+      translateTo === "pt" ? "Portuguese" :
+      translateTo === "yo" ? "Yorùbá (with full tonal marks and sub-dots)" : "";
+
+    let parts = [];
+    let cleanMime = "";
+
+    if (audioBase64) {
+      cleanMime = (mimeType || "audio/mp4").split(";")[0].trim();
+      if (cleanMime.includes("m4a") || cleanMime === "") {
+        cleanMime = "audio/mp4";
+      }
+
+      backlog.push(`[${stamp()}] Received audio (${Math.round(audioBase64.length * 0.75 / 1024)} KB, mime: ${cleanMime}, translate: ${targetLang || "none"})`);
+
+      const promptText = targetLang
+        ? `Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ), and provide a natural ${targetLang} translation. Format the output cleanly as:\nYorùbá: <transcription>\n${targetLang}: <translation>`
+        : "Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the Yorùbá transcription.";
+
+      parts = [
+        { text: promptText },
+        { inline_data: { mime_type: cleanMime, data: audioBase64 } }
+      ];
+    } else {
+      backlog.push(`[${stamp()}] Translating text (${textToTranslate.length} chars) -> ${targetLang || "English"}`);
+      const lang = targetLang || "English";
+      parts = [
+        {
+          text: `Translate the following text into ${lang}. If the source or target is Yorùbá, preserve or apply accurate standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the translation:\n\n${textToTranslate}`
+        }
+      ];
     }
-    
-    backlog.push(`[${stamp()}] Received payload (${Math.round(audioBase64.length * 0.75 / 1024)} KB, mime: ${cleanMime})`);
 
     const attempts = [
       { model: "gemini-2.5-flash-lite", config: {} },
@@ -47,21 +74,7 @@ export default async function handler(req, res) {
             signal: controller.signal,
             body: JSON.stringify({
               generationConfig: config,
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: "Transcribe this Yorùbá audio accurately using standard Yorùbá orthography with full tonal marks (àmì ohùn) and sub-dots (ẹ, ọ, ṣ). Return only the Yorùbá transcription."
-                    },
-                    {
-                      inline_data: {
-                        mime_type: cleanMime,
-                        data: audioBase64
-                      }
-                    }
-                  ]
-                }
-              ]
+              contents: [{ parts }]
             })
           }
         );
@@ -80,7 +93,7 @@ export default async function handler(req, res) {
           const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
           backlog.push(`[${stamp()}] ${model} succeeded in ${elapsed}s!`);
           if (!transcript.trim()) {
-            return res.status(200).json({ error: "No speech detected in the audio file.", backlog });
+            return res.status(200).json({ error: "No speech or text output returned.", backlog });
           }
           return res.status(200).json({ transcript: transcript.trim(), backlog });
         }
