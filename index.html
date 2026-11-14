@@ -495,7 +495,7 @@
     <header>
       <div class="brand">
         <h1>Kọ́ Yorùbá — Keyboard, Audio Upload &amp; Voice Pad</h1>
-        <p>Type diacritics, transcribe &amp; translate Yorùbá audio, or dictate with your mic.</p>
+        <p>Type diacritics, transcribe &amp; translate Yorùbá, English, or Portuguese.</p>
       </div>
       <div class="status-pill">
         <span class="status-dot" id="smart-dot"></span>
@@ -519,6 +519,7 @@
               <option value="none">Yorùbá Only</option>
               <option value="en" selected>+ English</option>
               <option value="pt">+ Português</option>
+              <option value="yo">+ Yorùbá</option>
             </select>
             <button type="button" class="btn" onclick="downloadTxt()">💾 .txt</button>
           </div>
@@ -693,7 +694,10 @@
     let audioChunks = [];
     let isRecording = false;
     let uploadedAudioFile = null;
-    let ttsAudio = null;
+
+    const ttsPlayer = new Audio();
+    ttsPlayer.playsInline = true;
+    let currentTtsUrl = null;
 
     function preventFocusLoss(e) {
       e.preventDefault();
@@ -829,7 +833,7 @@
 
       const btn = document.getElementById("translate-pad-btn");
       const target = translateLangSelect.value === "none" ? "en" : translateLangSelect.value;
-      const label = target === "pt" ? "Português" : "English";
+      const label = target === "pt" ? "Português" : (target === "yo" ? "Yorùbá" : "English");
 
       btn.disabled = true;
       btn.textContent = "⏳ Translating...";
@@ -1183,33 +1187,37 @@
         return;
       }
 
-      if (ttsAudio && !ttsAudio.paused) {
-        ttsAudio.pause();
-        ttsAudio = null;
+      const btn = document.getElementById("listen-btn");
+
+      if (!ttsPlayer.paused) {
+        ttsPlayer.pause();
+        ttsPlayer.currentTime = 0;
+        btn.textContent = "🔊 Listen";
+        btn.disabled = false;
         return;
       }
 
-      const btn = document.getElementById("listen-btn");
+      // Unlock audio playback synchronously on iOS Safari before async fetch()
+      ttsPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      ttsPlayer.play().catch(() => {});
+
       btn.disabled = true;
       btn.textContent = "⏳ Loading audio...";
 
       try {
-        const yorubaOnly = text
-          .split("\n")
-          .filter(line => !/^(English|Português|Portuguese):/i.test(line.trim()))
-          .join("\n")
-          .replace(/^Yorùbá:\s*/i, "")
-          .trim() || text;
+        const cleanText = text.replace(/\*\*/g, "").trim();
 
         const response = await fetch("/api/transcribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ textToSpeak: yorubaOnly.slice(0, 1000) })
+          body: JSON.stringify({ textToSpeak: cleanText.slice(0, 1200) })
         });
 
         const data = await response.json();
         if (!response.ok || !data.audioBase64) {
-          showToast("Voice error: " + (data.error || "Could not generate Yorùbá audio."));
+          showToast("Voice error: " + (data.error || "Could not generate audio."));
+          btn.disabled = false;
+          btn.textContent = "🔊 Listen";
           return;
         }
 
@@ -1225,29 +1233,26 @@
           blob = new Blob([bytes], { type: data.mimeType || "audio/wav" });
         }
 
-        const url = URL.createObjectURL(blob);
-        ttsAudio = new Audio(url);
+        if (currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
+        currentTtsUrl = URL.createObjectURL(blob);
+
+        ttsPlayer.src = currentTtsUrl;
         btn.textContent = "⏹ Stop";
         btn.disabled = false;
 
-        ttsAudio.onended = () => {
+        ttsPlayer.onended = () => {
           btn.textContent = "🔊 Listen";
-          URL.revokeObjectURL(url);
-          ttsAudio = null;
         };
-        ttsAudio.onerror = () => {
+        ttsPlayer.onerror = () => {
           btn.textContent = "🔊 Listen";
           showToast("Could not play generated audio on this device.");
         };
 
-        await ttsAudio.play();
+        await ttsPlayer.play();
       } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "🔊 Listen";
         showToast("Audio failed: " + err.message);
-      } finally {
-        if (!ttsAudio || ttsAudio.paused) {
-          btn.disabled = false;
-          btn.textContent = "🔊 Listen";
-        }
       }
     }
 
