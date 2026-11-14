@@ -122,20 +122,20 @@
       align-items: center;
     }
 
-    button.btn {
+    button.btn, select.btn-select {
       background: var(--surface-alt);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 7px 11px;
+      padding: 7px 10px;
       border-radius: 8px;
-      font-size: 0.84rem;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       touch-action: manipulation;
       transition: all 0.12s ease;
     }
 
-    button.btn:disabled {
+    button.btn:disabled, select.btn-select:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
@@ -169,6 +169,12 @@
       background: #f4f3ff;
       border-color: #d9d6fe;
       color: #5925dc;
+    }
+
+    button.speed-btn.active-speed {
+      background: #5925dc;
+      border-color: #5925dc;
+      color: #fff;
     }
 
     @keyframes pulse {
@@ -225,9 +231,9 @@
 
     textarea#pad {
       width: 100%;
-      min-height: 130px;
+      min-height: 145px;
       padding: 12px;
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       line-height: 1.55;
       font-family: -apple-system, "Noto Sans", sans-serif;
       border: 2px solid var(--border);
@@ -489,7 +495,7 @@
     <header>
       <div class="brand">
         <h1>Kọ́ Yorùbá — Keyboard, Audio Upload &amp; Voice Pad</h1>
-        <p>Type diacritics, upload Yorùbá audio to auto-transcribe, or dictate with your mic.</p>
+        <p>Type diacritics, transcribe &amp; translate Yorùbá audio, or dictate with your mic.</p>
       </div>
       <div class="status-pill">
         <span class="status-dot" id="smart-dot"></span>
@@ -508,6 +514,12 @@
             <button type="button" class="btn btn-upload" onclick="document.getElementById('audio-file-input').click()">📂 Audio File</button>
             <button type="button" class="btn btn-mic" id="mic-btn" onclick="toggleDictation()">🎙️ Dictate</button>
             <button type="button" class="btn btn-accent" onclick="speakYoruba()">🔊 Listen</button>
+            <button type="button" class="btn" id="translate-pad-btn" onclick="translatePadText()">🌐 Translate Text</button>
+            <select id="translate-lang" class="btn-select" title="Translation language">
+              <option value="none">Yorùbá Only</option>
+              <option value="en" selected>+ English</option>
+              <option value="pt">+ Português</option>
+            </select>
             <button type="button" class="btn" onclick="downloadTxt()">💾 .txt</button>
           </div>
           <div class="toolbar-group">
@@ -527,8 +539,13 @@
           <audio id="audio-player" controls style="width:100%; height:36px;"></audio>
           <div class="audio-controls">
             <button type="button" class="btn btn-primary" id="transcribe-ai-btn" onclick="transcribeUploadedAudio()">✨ Auto-Transcribe</button>
-            <button type="button" class="btn" onclick="setPlaybackRate(0.75)">🐢 0.75×</button>
-            <button type="button" class="btn" onclick="setPlaybackRate(1.0)">▶️ 1.0×</button>
+            <button type="button" class="btn" onclick="skipAudio(-15)">⏪ 15s</button>
+            <button type="button" class="btn" onclick="skipAudio(30)">⏩ 30s</button>
+            <button type="button" class="btn speed-btn" data-rate="0.5" onclick="setPlaybackRate(0.5)">0.5×</button>
+            <button type="button" class="btn speed-btn" data-rate="0.75" onclick="setPlaybackRate(0.75)">0.75×</button>
+            <button type="button" class="btn speed-btn active-speed" data-rate="1" onclick="setPlaybackRate(1.0)">1.0×</button>
+            <button type="button" class="btn speed-btn" data-rate="1.5" onclick="setPlaybackRate(1.5)">1.5×</button>
+            <button type="button" class="btn speed-btn" data-rate="2" onclick="setPlaybackRate(2.0)">2.0×</button>
             <button type="button" class="btn" id="loop-btn" onclick="toggleLoop()">🔁 Loop: Off</button>
           </div>
           <div id="transcribe-status" style="display:none; margin-top:8px; padding:7px 10px; border-radius:6px; font-size:0.8rem; background:#fff; border:1px solid #d9d6fe; color:#1e2421; word-break:break-word;"></div>
@@ -667,6 +684,7 @@
     const interimText = document.getElementById("interim-text");
     const audioWorkspace = document.getElementById("audio-workspace");
     const audioPlayer = document.getElementById("audio-player");
+    const translateLangSelect = document.getElementById("translate-lang");
 
     let isShift = false;
     let historyStack = [];
@@ -707,7 +725,16 @@
 
     function setPlaybackRate(rate) {
       audioPlayer.playbackRate = rate;
+      document.querySelectorAll(".speed-btn").forEach(btn => {
+        btn.classList.toggle("active-speed", parseFloat(btn.getAttribute("data-rate")) === rate);
+      });
       showToast("Playback speed: " + rate + "×");
+    }
+
+    function skipAudio(seconds) {
+      if (!audioPlayer.src) return;
+      const duration = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : Infinity;
+      audioPlayer.currentTime = Math.max(0, Math.min(duration, audioPlayer.currentTime + seconds));
     }
 
     function toggleLoop() {
@@ -725,6 +752,7 @@
       const statusBox = document.getElementById("transcribe-status");
       const clientStart = Date.now();
       const cStamp = () => `+${((Date.now() - clientStart) / 1000).toFixed(2)}s`;
+      const translateTo = translateLangSelect.value;
 
       btn.disabled = true;
       btn.textContent = "⏳ Transcribing...";
@@ -754,7 +782,8 @@
           signal: controller.signal,
           body: JSON.stringify({
             audioBase64,
-            mimeType: uploadedAudioFile.type || "audio/mp4"
+            mimeType: uploadedAudioFile.type || "audio/mp4",
+            translateTo
           })
         });
 
@@ -771,10 +800,10 @@
         const serverLog = Array.isArray(data.backlog) ? `\n\n--- Server Backlog ---\n${data.backlog.join("\n")}` : "";
 
         if (response.ok && data.transcript) {
-          insertPhrase(data.transcript);
+          insertBlock(data.transcript);
           statusBox.style.color = "#1b5e43";
-          statusBox.textContent += `\n[${cStamp()}] Done! Transcription inserted.${serverLog}`;
-          showToast("Yorùbá transcription inserted!");
+          statusBox.textContent += `\n[${cStamp()}] Done! Output inserted.${serverLog}`;
+          showToast(translateTo !== "none" ? "Transcription & translation inserted!" : "Yorùbá transcription inserted!");
         } else {
           statusBox.style.color = "#b42318";
           statusBox.textContent += `\n[${cStamp()}] Error: ${data.error || `HTTP ${response.status}`}${serverLog}`;
@@ -787,6 +816,53 @@
         clearTimeout(timer);
         btn.disabled = false;
         btn.textContent = "✨ Auto-Transcribe";
+      }
+    }
+
+    async function translatePadText() {
+      const sourceText = pad.value.trim();
+      if (!sourceText) {
+        showToast("Type or transcribe some text first!");
+        return;
+      }
+
+      const btn = document.getElementById("translate-pad-btn");
+      const target = translateLangSelect.value === "none" ? "en" : translateLangSelect.value;
+      const label = target === "pt" ? "Português" : "English";
+
+      btn.disabled = true;
+      btn.textContent = "⏳ Translating...";
+
+      try {
+        const response = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            textToTranslate: sourceText,
+            translateTo: target
+          })
+        });
+
+        const rawText = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          showToast(`Server error (${response.status})`);
+          return;
+        }
+
+        if (response.ok && data.transcript) {
+          insertBlock(`${label}: ${data.transcript}`);
+          showToast(`Translated to ${label}!`);
+        } else {
+          showToast("Error: " + (data.error || "Could not translate."));
+        }
+      } catch (err) {
+        showToast("Translation failed: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🌐 Translate Text";
       }
     }
 
@@ -814,6 +890,14 @@
       pad.value = pad.value.slice(0, start) + text + pad.value.slice(end);
       const nextPos = start + text.length;
       pad.setSelectionRange(nextPos, nextPos);
+      updateStats();
+    }
+
+    function insertBlock(blockText) {
+      saveHistory();
+      const prefix = pad.value.trim().length > 0 ? (pad.value.endsWith("\n") ? "\n" : "\n\n") : "";
+      pad.value = pad.value + prefix + blockText;
+      pad.setSelectionRange(pad.value.length, pad.value.length);
       updateStats();
     }
 
