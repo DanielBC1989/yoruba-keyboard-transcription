@@ -531,6 +531,7 @@
             <button type="button" class="btn" onclick="setPlaybackRate(1.0)">▶️ 1.0×</button>
             <button type="button" class="btn" id="loop-btn" onclick="toggleLoop()">🔁 Loop: Off</button>
           </div>
+          <div id="transcribe-status" style="display:none; margin-top:8px; padding:7px 10px; border-radius:6px; font-size:0.8rem; background:#fff; border:1px solid #d9d6fe; color:#1e2421; word-break:break-word;"></div>
         </div>
 
         <div class="interim-banner" id="interim-box">🎙️ Listening in Yorùbá (yo-NG)... <span id="interim-text"></span></div>
@@ -681,14 +682,20 @@
     function handleAudioUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
-      if (file.size > 15 * 1024 * 1024) {
-        showToast("Please choose an audio file under 15 MB.");
+      if (file.size > 3.2 * 1024 * 1024) {
+        showToast("File too large for Vercel (max ~3.2 MB). Please trim or compress it.");
+        event.target.value = "";
         return;
       }
       uploadedAudioFile = file;
       document.getElementById("audio-filename").textContent = "🎵 " + file.name;
       audioPlayer.src = URL.createObjectURL(file);
       audioWorkspace.classList.add("active");
+      const statusBox = document.getElementById("transcribe-status");
+      if (statusBox) {
+        statusBox.style.display = "none";
+        statusBox.textContent = "";
+      }
       showToast("Audio loaded! Click Auto-Transcribe or play.");
     }
 
@@ -714,36 +721,62 @@
       }
 
       const btn = document.getElementById("transcribe-ai-btn");
+      const statusBox = document.getElementById("transcribe-status");
       btn.disabled = true;
       btn.textContent = "⏳ Transcribing...";
+      statusBox.style.display = "block";
+      statusBox.style.color = "#175cd3";
+      statusBox.textContent = "1/2 Reading audio file...";
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 35000);
 
       try {
         const audioBase64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(",")[1]);
-          reader.onerror = reject;
+          reader.onerror = () => reject(new Error("Could not read file from device."));
           reader.readAsDataURL(uploadedAudioFile);
         });
+
+        statusBox.textContent = "2/2 Sending to /api/transcribe...";
 
         const response = await fetch("/api/transcribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             audioBase64,
-            mimeType: uploadedAudioFile.type || "audio/mp3"
+            mimeType: uploadedAudioFile.type || "audio/mp4"
           })
         });
 
-        const data = await response.json();
+        const rawText = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          statusBox.style.color = "#b42318";
+          statusBox.textContent = `Server returned HTTP ${response.status}: ${rawText.slice(0, 180)}`;
+          return;
+        }
+
         if (response.ok && data.transcript) {
           insertPhrase(data.transcript);
+          statusBox.style.color = "#1b5e43";
+          statusBox.textContent = "Done! Transcription inserted.";
           showToast("Yorùbá transcription inserted!");
         } else {
-          showToast("Error: " + (data.error || "Could not transcribe audio."));
+          statusBox.style.color = "#b42318";
+          statusBox.textContent = "Error: " + (data.error || `HTTP ${response.status}`);
         }
       } catch (err) {
-        showToast("Transcription failed: " + err.message);
+        statusBox.style.color = "#b42318";
+        statusBox.textContent = err.name === "AbortError"
+          ? "Timed out after 35s."
+          : ("Failed: " + err.message);
       } finally {
+        clearTimeout(timer);
         btn.disabled = false;
         btn.textContent = "✨ Auto-Transcribe";
       }
