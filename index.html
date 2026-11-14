@@ -534,7 +534,7 @@
           <div id="transcribe-status" style="display:none; margin-top:8px; padding:7px 10px; border-radius:6px; font-size:0.8rem; background:#fff; border:1px solid #d9d6fe; color:#1e2421; word-break:break-word;"></div>
         </div>
 
-        <div class="interim-banner" id="interim-box">🎙️ Listening in Yorùbá (yo-NG)... <span id="interim-text"></span></div>
+        <div class="interim-banner" id="interim-box">🎙️ <span id="interim-text">Recording audio...</span></div>
 
         <textarea id="pad" placeholder="Bẹ̀rẹ̀ sí í kọ̀wé tàbí sọ̀rọ̀ níbí... (Type, upload audio, or dictate Yorùbá here...)" spellcheck="false"></textarea>
 
@@ -671,7 +671,8 @@
     let isShift = false;
     let historyStack = [];
     let audioCtx = null;
-    let recognition = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
     let isRecording = false;
     let uploadedAudioFile = null;
 
@@ -722,14 +723,20 @@
 
       const btn = document.getElementById("transcribe-ai-btn");
       const statusBox = document.getElementById("transcribe-status");
+      const clientStart = Date.now();
+      const cStamp = () => `+${((Date.now() - clientStart) / 1000).toFixed(2)}s`;
+
       btn.disabled = true;
       btn.textContent = "⏳ Transcribing...";
       statusBox.style.display = "block";
+      statusBox.style.whiteSpace = "pre-wrap";
+      statusBox.style.fontFamily = "monospace";
+      statusBox.style.fontSize = "0.75rem";
       statusBox.style.color = "#175cd3";
-      statusBox.textContent = "1/2 Reading audio file...";
+      statusBox.textContent = `[${cStamp()}] Reading ${uploadedAudioFile.name} (${Math.round(uploadedAudioFile.size / 1024)} KB)...`;
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 35000);
+      const timer = setTimeout(() => controller.abort(), 65000);
 
       try {
         const audioBase64 = await new Promise((resolve, reject) => {
@@ -739,7 +746,7 @@
           reader.readAsDataURL(uploadedAudioFile);
         });
 
-        statusBox.textContent = "2/2 Sending to /api/transcribe...";
+        statusBox.textContent += `\n[${cStamp()}] Sending to /api/transcribe...`;
 
         const response = await fetch("/api/transcribe", {
           method: "POST",
@@ -757,24 +764,25 @@
           data = JSON.parse(rawText);
         } catch {
           statusBox.style.color = "#b42318";
-          statusBox.textContent = `Server returned HTTP ${response.status}: ${rawText.slice(0, 180)}`;
+          statusBox.textContent += `\n[${cStamp()}] Server returned HTTP ${response.status} (non-JSON):\n${rawText.slice(0, 250)}`;
           return;
         }
+
+        const serverLog = Array.isArray(data.backlog) ? `\n\n--- Server Backlog ---\n${data.backlog.join("\n")}` : "";
 
         if (response.ok && data.transcript) {
           insertPhrase(data.transcript);
           statusBox.style.color = "#1b5e43";
-          statusBox.textContent = "Done! Transcription inserted.";
+          statusBox.textContent += `\n[${cStamp()}] Done! Transcription inserted.${serverLog}`;
           showToast("Yorùbá transcription inserted!");
         } else {
           statusBox.style.color = "#b42318";
-          statusBox.textContent = "Error: " + (data.error || `HTTP ${response.status}`);
+          statusBox.textContent += `\n[${cStamp()}] Error: ${data.error || `HTTP ${response.status}`}${serverLog}`;
         }
       } catch (err) {
         statusBox.style.color = "#b42318";
-        statusBox.textContent = err.name === "AbortError"
-          ? "Timed out after 35s."
-          : ("Failed: " + err.message);
+        const msg = err.name === "AbortError" ? "Client aborted after 65s timeout." : err.message;
+        statusBox.textContent += `\n[${cStamp()}] Failed: ${msg}`;
       } finally {
         clearTimeout(timer);
         btn.disabled = false;
@@ -933,61 +941,88 @@
       insertAtCursor((needsSpace ? " " : "") + phrase);
     }
 
-    function toggleDictation() {
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRec) {
-        showToast("Speech recognition requires Chrome, Edge, or Safari.");
+    async function toggleDictation() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+        showToast("Microphone recording is not supported in this browser.");
         return;
       }
 
-      if (isRecording && recognition) {
-        recognition.stop();
+      if (isRecording && mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
         return;
       }
 
-      recognition = new SpeechRec();
-      recognition.lang = "yo-NG";
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      recognition.onstart = () => {
-        isRecording = true;
-        micBtn.classList.add("recording");
-        micBtn.textContent = "⏹ Stop";
-        interimBox.classList.add("active");
-        interimText.textContent = "";
-      };
-
-      recognition.onresult = (event) => {
-        let interim = "";
-        let finalChunk = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalChunk += transcript;
-          } else {
-            interim += transcript;
+        const candidates = [
+          "audio/mp4",
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus"
+        ];
+        let selectedType = "";
+        for (const type of candidates) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            selectedType = type;
+            break;
           }
         }
-        interimText.textContent = interim;
-        if (finalChunk.trim()) {
-          insertPhrase(finalChunk.trim());
-          interimText.textContent = "";
-        }
-      };
 
-      recognition.onerror = (event) => {
-        showToast("Mic error: " + event.error);
-      };
+        audioChunks = [];
+        mediaRecorder = selectedType
+          ? new MediaRecorder(stream, { mimeType: selectedType })
+          : new MediaRecorder(stream);
 
-      recognition.onend = () => {
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          isRecording = false;
+          micBtn.classList.remove("recording");
+          micBtn.textContent = "🎙️ Dictate";
+          interimBox.classList.remove("active");
+
+          const actualMime = mediaRecorder.mimeType || selectedType || "audio/mp4";
+          const cleanMime = actualMime.split(";")[0];
+          const ext = cleanMime.includes("webm") ? "webm" : (cleanMime.includes("ogg") ? "ogg" : "m4a");
+          const blob = new Blob(audioChunks, { type: cleanMime });
+
+          if (blob.size < 500) {
+            showToast("Recording too short—please speak for at least 1 second.");
+            return;
+          }
+
+          if (blob.size > 3.2 * 1024 * 1024) {
+            showToast("Recording exceeded ~3.2 MB Vercel limit. Please keep clips under ~45 seconds.");
+            return;
+          }
+
+          uploadedAudioFile = new File([blob], `mic-recording.${ext}`, { type: cleanMime });
+          document.getElementById("audio-filename").textContent = `🎙️ mic-recording.${ext} (${Math.round(blob.size / 1024)} KB)`;
+          audioPlayer.src = URL.createObjectURL(blob);
+          audioWorkspace.classList.add("active");
+
+          await transcribeUploadedAudio();
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        micBtn.classList.add("recording");
+        micBtn.textContent = "⏹ Stop & Transcribe";
+        interimBox.classList.add("active");
+        interimText.textContent = "Recording audio... Tap 'Stop & Transcribe' when finished.";
+      } catch (err) {
         isRecording = false;
         micBtn.classList.remove("recording");
         micBtn.textContent = "🎙️ Dictate";
         interimBox.classList.remove("active");
-      };
-
-      recognition.start();
+        showToast("Mic access denied or unavailable: " + err.message);
+      }
     }
 
     function copyText() {
